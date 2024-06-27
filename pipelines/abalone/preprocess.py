@@ -165,6 +165,11 @@ if __name__ == "__main__":
     os.unlink(fn)
 
     logger.debug("Defining transformers.")
+
+    ## Old transformer stuff
+    # numeric_features = list(feature_columns_names)
+    # numeric_features.remove("sex")
+    # categorical_features = ["sex"]
     numeric_features = [col for col, dtype in feature_columns_dtype.items() if dtype in [int, float, np.float64]]
     categorical_features = [col for col, dtype in feature_columns_dtype.items() if dtype == str]
     numeric_transformer = Pipeline(
@@ -186,19 +191,14 @@ if __name__ == "__main__":
     )
 
     logger.info("Applying transforms.")
-    y = df.pop("rings")
-    X_pre = preprocess.fit_transform(df)
-    y_pre = y.to_numpy().reshape(len(y), 1)
+    # y = df.pop("rings")
+    X = preprocess.fit_transform(df)
+    # y_pre = y.to_numpy().reshape(len(y), 1)
 
-    X = np.concatenate((y_pre, X_pre), axis=1)
+    # X = np.concatenate((y_pre, X_pre), axis=1)
 
-    logger.info("Splitting %d rows of data into train, validation, test datasets.", len(X))
+    logger.info("Applying kmeans clustering.")
     np.random.shuffle(X)
-    train, validation, test = np.split(X, [int(0.7 * len(X)), int(0.85 * len(X))])
 
     logger.info("Writing out datasets to %s.", base_dir)
-    pd.DataFrame(train).to_csv(f"{base_dir}/train/train.csv", header=False, index=False)
-    pd.DataFrame(validation).to_csv(
-        f"{base_dir}/validation/validation.csv", header=False, index=False
-    )
-    pd.DataFrame(test).to_csv(f"{base_dir}/test/test.csv", header=False, index=False)
+    pd.DataFrame(X).to_csv(f"{base_dir}/train/kmeans_data.csv", header=False, index=False)
