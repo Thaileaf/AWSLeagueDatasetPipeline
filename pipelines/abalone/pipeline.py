@@ -127,13 +127,13 @@ def get_pipeline(
     sagemaker_project_name=None,
     role=None,
     default_bucket=None,
-    model_package_group_name="AbalonePackageGroup",
-    pipeline_name="AbalonePipeline",
-    base_job_prefix="Abalone",
+    model_package_group_name="LeagueStatsKMeansPackageGroup",
+    pipeline_name="LeagueStatsKmeansPipeline",
+    base_job_prefix="LeagueStats",
     processing_instance_type="ml.m5.xlarge",
     training_instance_type="ml.m5.xlarge",
 ):
-    """Gets a SageMaker ML Pipeline instance working with on abalone data.
+    """Gets a SageMaker ML Pipeline instance working with on League Stats data.
 
     Args:
         region: AWS region to create and run the pipeline.
@@ -156,15 +156,18 @@ def get_pipeline(
     )
     input_data = ParameterString(
         name="InputDataUrl",
-        default_value=f"s3://sagemaker-servicecatalog-seedcode-{region}/dataset/abalone-dataset.csv",
+        default_value=f"s3://sagemaker-servicecatalog-seedcode-{region}/dataset/league-stats-dataset.csv",
     )
+
+    ## New, adding kclusters parameter
+    k_clusters = ParameterInteger(name="KClusters", default_value=5)
 
     # processing step for feature engineering
     sklearn_processor = SKLearnProcessor(
         framework_version="0.23-1",
         instance_type=processing_instance_type,
         instance_count=processing_instance_count,
-        base_job_name=f"{base_job_prefix}/sklearn-abalone-preprocess",
+        base_job_name=f"{base_job_prefix}/sklearn-league-stats-preprocess",
         sagemaker_session=pipeline_session,
         role=role,
     )
@@ -178,39 +181,29 @@ def get_pipeline(
         arguments=["--input-data", input_data],
     )
     step_process = ProcessingStep(
-        name="PreprocessAbaloneData",
+        name="PreprocessLeagueStatsData",
         step_args=step_args,
     )
 
     # training step for generating model artifacts
-    model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain"
+    model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/LeagueStatsKMeansTrain"
     image_uri = sagemaker.image_uris.retrieve(
-        framework="xgboost",
+        framework="kmeans",
         region=region,
-        version="1.0-1",
-        py_version="py3",
-        instance_type=training_instance_type,
     )
-    xgb_train = Estimator(
+    kmeans = Estimator(
         image_uri=image_uri,
         instance_type=training_instance_type,
         instance_count=1,
         output_path=model_path,
-        base_job_name=f"{base_job_prefix}/abalone-train",
+        base_job_name=f"{base_job_prefix}/league-stats-kmeans-train",
         sagemaker_session=pipeline_session,
         role=role,
     )
-    xgb_train.set_hyperparameters(
-        objective="reg:linear",
-        num_round=50,
-        max_depth=5,
-        eta=0.2,
-        gamma=4,
-        min_child_weight=6,
-        subsample=0.7,
-        silent=0,
-    )
-    step_args = xgb_train.fit(
+    kmeans.set_hyperparameters(k=k_clusters, feature_dim=80) ## TODO: make sure feature dim is correct
+    ## TODO: Also look more at different kmeans hyperparameters
+    ## https://docs.aws.amazon.com/sagemaker/latest/dg/k-means-api-config.html
+    step_args = kmeans.fit(
         inputs={
             "train": TrainingInput(
                 s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
@@ -218,16 +211,10 @@ def get_pipeline(
                 ].S3Output.S3Uri,
                 content_type="text/csv",
             ),
-            "validation": TrainingInput(
-                s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
-                    "validation"
-                ].S3Output.S3Uri,
-                content_type="text/csv",
-            ),
         },
     )
     step_train = TrainingStep(
-        name="TrainAbaloneModel",
+        name="TrainLeagueStatsKMeansModel",
         step_args=step_args,
     )
 
@@ -237,7 +224,7 @@ def get_pipeline(
         command=["python3"],
         instance_type=processing_instance_type,
         instance_count=1,
-        base_job_name=f"{base_job_prefix}/script-abalone-eval",
+        base_job_name=f"{base_job_prefix}/script-league-stats-eval",
         sagemaker_session=pipeline_session,
         role=role,
     )
@@ -260,12 +247,12 @@ def get_pipeline(
         code=os.path.join(BASE_DIR, "evaluate.py"),
     )
     evaluation_report = PropertyFile(
-        name="AbaloneEvaluationReport",
+        name="LeagueStatsKmeansEvaluationReport",
         output_name="evaluation",
         path="evaluation.json",
     )
     step_eval = ProcessingStep(
-        name="EvaluateAbaloneModel",
+        name="EvaluateLeagueStatsKMeansModel",
         step_args=step_args,
         property_files=[evaluation_report],
     )
