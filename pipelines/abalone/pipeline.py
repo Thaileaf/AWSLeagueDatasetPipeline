@@ -282,25 +282,26 @@ def get_pipeline(
         model_metrics=model_metrics,
     )
     step_register = ModelStep(
-        name="RegisterAbaloneModel",
+        name="RegisterStatsKMeansModel",
         step_args=step_args,
     )
 
-    # condition step for evaluating model quality and branching execution
-    cond_lte = ConditionLessThanOrEqualTo(
-        left=JsonGet(
-            step_name=step_eval.name,
-            property_file=evaluation_report,
-            json_path="regression_metrics.mse.value"
-        ),
-        right=6.0,
-    )
-    step_cond = ConditionStep(
-        name="CheckMSEAbaloneEvaluation",
-        conditions=[cond_lte],
-        if_steps=[step_register],
-        else_steps=[],
-    )
+    ## Not evaluating with MSE anymore
+    # # condition step for evaluating model quality and branching execution
+    # cond_lte = ConditionLessThanOrEqualTo(
+    #     left=JsonGet(
+    #         step_name=step_eval.name,
+    #         property_file=evaluation_report,
+    #         json_path="regression_metrics.mse.value"
+    #     ),
+    #     right=6.0,
+    # )
+    # step_cond = ConditionStep(
+    #     name="CheckMSEAbaloneEvaluation",
+    #     conditions=[cond_lte],
+    #     if_steps=[step_register],
+    #     else_steps=[],
+    # )
 
     # pipeline instance
     pipeline = Pipeline(
@@ -312,7 +313,7 @@ def get_pipeline(
             model_approval_status,
             input_data,
         ],
-        steps=[step_process, step_train, step_eval, step_cond],
+        steps=[step_process, step_train, step_eval, step_register],
         sagemaker_session=pipeline_session,
     )
     return pipeline
